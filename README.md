@@ -72,8 +72,16 @@ Run:
 
 ```bash
 make test
+make lint-rtl
+make sim-rtl
+make validate
 make demo
 ```
+
+`make lint-rtl` sets `LANG=C LC_ALL=C` because the Homebrew Verilator bottle can
+panic in shells configured for `C.UTF-8`. `make sim-rtl` compiles and runs the
+current Verilator smoke tests for the aligned ITCH canonicalizer and the
+order-reference store.
 
 ## Source Brief
 

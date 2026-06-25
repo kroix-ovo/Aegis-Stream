@@ -55,7 +55,8 @@ steps are:
 
 1. Add packet buffering and byte-lane alignment for variable-length ITCH records.
 2. Add transport sequence validation and loss/gap telemetry.
-3. Build a banked order-reference store with BRAM/URAM hot cache and HBM model.
+3. Grow the current small `order_ref_store` into a banked order-reference store
+   with BRAM/URAM hot cache and HBM model.
 4. Add book-state, feature-window, and sequence-core modules behind the same
    ready/valid contracts.
 5. Use cocotb to compare every RTL stage against the Python package.

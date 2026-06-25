@@ -1,5 +1,10 @@
+`timescale 1ns/1ps
+
 package aegis_stream_pkg;
+  /* verilator lint_off UNUSEDPARAM */
   localparam int AEGIS_EVENT_W = 256;
+  localparam int AEGIS_TELEMETRY_W = 384;
+  /* verilator lint_on UNUSEDPARAM */
 
   typedef enum logic [7:0] {
     AEGIS_EVT_NONE    = 8'd0,
@@ -10,6 +15,14 @@ package aegis_stream_pkg;
     AEGIS_EVT_REPLACE = 8'd5,
     AEGIS_EVT_TRADE   = 8'd6
   } aegis_event_type_e;
+
+  typedef enum logic [2:0] {
+    AEGIS_ORD_INSERT  = 3'd0,
+    AEGIS_ORD_EXEC    = 3'd1,
+    AEGIS_ORD_CANCEL  = 3'd2,
+    AEGIS_ORD_DELETE  = 3'd3,
+    AEGIS_ORD_REPLACE = 3'd4
+  } aegis_order_op_e;
 
   typedef struct packed {
     logic [7:0]  event_type;

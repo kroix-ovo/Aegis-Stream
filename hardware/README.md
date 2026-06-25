@@ -6,8 +6,23 @@ files are intentionally narrow:
 - `rtl/aegis_stream_pkg.sv` defines the canonical 256-bit event format.
 - `rtl/itch_canonicalizer.sv` is a starter aligned-message canonicalizer for
   parser scoreboarding and early integration.
+- `rtl/order_ref_store.sv` is a small synthesizable order-reference store for
+  early lifecycle testing before the HBM-backed design lands.
 - `rtl/latency_telemetry.sv` captures stage timestamps into a packed telemetry
   record.
+
+Run static RTL checks with:
+
+```bash
+make lint-rtl
+make sim-rtl
+```
+
+The Makefile pins `LANG=C LC_ALL=C` around Verilator so Homebrew's Perl runtime
+does not inherit unsupported locale settings.
+
+`make sim-rtl` currently builds and runs Verilator C++ smoke tests for the
+aligned ITCH canonicalizer and the order-reference store.
 
 The complete board implementation should grow around these contracts:
 

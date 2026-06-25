@@ -1,7 +1,5 @@
 `timescale 1ns/1ps
 
-import aegis_stream_pkg::*;
-
 module itch_canonicalizer (
   input  logic         clk,
   input  logic         rst_n,
@@ -13,14 +11,18 @@ module itch_canonicalizer (
   input  logic         s_payload_tlast,
   input  logic [63:0]  s_payload_timestamp_ns,
 
-  output logic [255:0] m_event_tdata,
+  output logic [aegis_stream_pkg::AEGIS_EVENT_W-1:0] m_event_tdata,
   output logic         m_event_tvalid,
   input  logic         m_event_tready,
   output logic [7:0]   m_error
 );
+  import aegis_stream_pkg::*;
+
   aegis_event_t event_q;
   logic         valid_q;
   logic [7:0]   error_q;
+  logic [7:0]   decoded_type;
+  logic [7:0]   next_error;
 
   assign s_payload_tready = !valid_q || m_event_tready;
   assign m_event_tdata = event_q;
@@ -118,7 +120,34 @@ module itch_canonicalizer (
     return decoded;
   endfunction
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  function automatic logic [7:0] aligned_error(input logic [7:0] msg_type, input logic [39:0] keep, input logic last);
+    unique case (msg_type)
+      8'h44: aligned_error = (keep[18:0] != 19'h7ffff) ? 8'd2 : 8'd0;
+      8'h58: aligned_error = (keep[22:0] != 23'h7fffff) ? 8'd2 : 8'd0;
+      8'h45: aligned_error = (keep[30:0] != 31'h7fffffff) ? 8'd2 : 8'd0;
+      8'h41: aligned_error = (keep[35:0] != 36'hfffffffff) ? 8'd2 : 8'd0;
+      8'h55, 8'h43: aligned_error = (keep[35:0] != 36'hfffffffff) ? 8'd2 : 8'd0;
+      8'h46, 8'h50: aligned_error = (keep[39:0] != 40'hffffffffff) ? 8'd2 : 8'd0;
+      default: aligned_error = 8'd1;
+    endcase
+    if (!last) begin
+      aligned_error = 8'd3;
+    end
+  endfunction
+
+  always_comb begin
+    decoded_type = decode_aligned(s_payload_tdata, s_payload_timestamp_ns).event_type;
+    next_error = aligned_error(s_payload_tdata[511 -: 8], s_payload_tkeep[39:0], s_payload_tlast);
+    if (!s_payload_tvalid) begin
+      next_error = 8'd0;
+    end else if (decoded_type == AEGIS_EVT_NONE) begin
+      next_error = 8'd1;
+    end else if (|s_payload_tkeep[63:40]) begin
+      next_error = 8'd4;
+    end
+  end
+
+  always_ff @(posedge clk) begin
     if (!rst_n) begin
       event_q <= '0;
       valid_q <= 1'b0;
@@ -126,7 +155,7 @@ module itch_canonicalizer (
     end else if (s_payload_tready) begin
       valid_q <= s_payload_tvalid;
       event_q <= decode_aligned(s_payload_tdata, s_payload_timestamp_ns);
-      error_q <= (s_payload_tvalid && decode_aligned(s_payload_tdata, s_payload_timestamp_ns).event_type == AEGIS_EVT_NONE) ? 8'd1 : 8'd0;
+      error_q <= next_error;
     end
   end
 

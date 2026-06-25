@@ -1,7 +1,5 @@
 `timescale 1ns/1ps
 
-import aegis_stream_pkg::*;
-
 module latency_telemetry (
   input  logic        clk,
   input  logic        rst_n,
@@ -14,15 +12,17 @@ module latency_telemetry (
   input  logic        mark_feature,
   input  logic        mark_model,
 
-  output logic [351:0] telemetry_data,
+  output logic [aegis_stream_pkg::AEGIS_TELEMETRY_W-1:0] telemetry_data,
   output logic         telemetry_valid,
   input  logic         telemetry_ready
 );
+  import aegis_stream_pkg::*;
+
   aegis_telemetry_t record_q;
 
   assign telemetry_data = record_q;
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk) begin
     if (!rst_n) begin
       record_q <= '0;
       telemetry_valid <= 1'b0;
