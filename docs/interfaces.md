@@ -180,4 +180,18 @@ Run current hardware checks with:
 ```bash
 make lint-rtl
 make sim-rtl
+make test-rtl-cocotb PYTHON=cocotb-env/bin/python SIM=icarus
 ```
+
+Additional simulation RTL interfaces:
+
+- `itch_packet_buffer`: byte-valid 512-bit stream input to aligned ITCH-message
+  output with error codes for unsupported and truncated tails.
+- `transport_seq_checker`: MoldUDP64-style sequence/count metadata input to
+  packet, payload, gap, duplicate, malformed, and expected-sequence counters.
+- `price_level_topk`: single-shard aggregate level updates to sorted bid/ask
+  top-K arrays.
+- `feature_window_buffer`: 64-int8 feature-vector writes with age-indexed ring
+  reads.
+- `temporal_mixer_int8`: 64-int8 feature and weight vectors to a signed raw
+  logit and clamped score.

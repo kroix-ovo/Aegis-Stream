@@ -21,6 +21,10 @@ and replay instrumentation before FPGA telemetry is available.
 - The model path includes a float inference scaffold, fixed-point int8
   inference, a deterministic exported weight fixture, and a dependency-free
   float baseline trainer/evaluator.
+- RTL simulation includes Verilator lint/smoke tests plus cocotb scoreboards for
+  parser canonicalization, cross-beat buffering, order-reference lifecycle,
+  transport sequence counters, latency telemetry packing, top-K price levels,
+  feature-window buffering, and an int8 mixer MVP.
 
 ## Metrics Schema
 
@@ -47,6 +51,6 @@ PYTHONPATH=src python3 tools/generate_report.py
   floorplanning.
 - U55C/Agilex deployment, XRT/QDMA integration, CMAC/vendor shell integration,
   and hardware telemetry extraction.
-- Variable-length RTL parser, banked/HBM order-reference store, price-level RTL,
-  feature-window RTL, and sequence-compute RTL beyond the starter smoke-tested
-  modules.
+- Production parser composition, banked/HBM order-reference store, full
+  canonical-event-driven price-level pipeline, full temporal lookback model RTL,
+  and board-calibrated telemetry.

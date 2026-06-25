@@ -84,11 +84,14 @@ module itch_canonicalizer (
         decoded.shares = be32(data, 20);
         decoded.price = be32(data, 32);
       end
-      8'h45: begin
+      8'h45, 8'h43: begin
         decoded.event_type = AEGIS_EVT_EXEC;
         decoded.order_ref = be64(data, 11);
         decoded.shares = be32(data, 19);
         decoded.misc[15:0] = be16(data, 29);
+        if (msg_type == 8'h43) begin
+          decoded.price = be32(data, 32);
+        end
       end
       8'h58: begin
         decoded.event_type = AEGIS_EVT_CANCEL;
@@ -111,6 +114,7 @@ module itch_canonicalizer (
         decoded.side_flags = (data[511 - 19*8 -: 8] == 8'h42) ? 8'd1 : 8'd2;
         decoded.shares = be32(data, 20);
         decoded.price = be32(data, 32);
+        decoded.misc[15:0] = be16(data, 42);
       end
       default: begin
         decoded.event_type = AEGIS_EVT_NONE;
@@ -120,14 +124,16 @@ module itch_canonicalizer (
     return decoded;
   endfunction
 
-  function automatic logic [7:0] aligned_error(input logic [7:0] msg_type, input logic [39:0] keep, input logic last);
+  function automatic logic [7:0] aligned_error(input logic [7:0] msg_type, input logic [43:0] keep, input logic last);
     unique case (msg_type)
       8'h44: aligned_error = (keep[18:0] != 19'h7ffff) ? 8'd2 : 8'd0;
       8'h58: aligned_error = (keep[22:0] != 23'h7fffff) ? 8'd2 : 8'd0;
       8'h45: aligned_error = (keep[30:0] != 31'h7fffffff) ? 8'd2 : 8'd0;
       8'h41: aligned_error = (keep[35:0] != 36'hfffffffff) ? 8'd2 : 8'd0;
-      8'h55, 8'h43: aligned_error = (keep[35:0] != 36'hfffffffff) ? 8'd2 : 8'd0;
-      8'h46, 8'h50: aligned_error = (keep[39:0] != 40'hffffffffff) ? 8'd2 : 8'd0;
+      8'h43: aligned_error = (keep[35:0] != 36'hfffffffff) ? 8'd2 : 8'd0;
+      8'h55: aligned_error = (keep[34:0] != 35'h7ffffffff) ? 8'd2 : 8'd0;
+      8'h46: aligned_error = (keep[39:0] != 40'hffffffffff) ? 8'd2 : 8'd0;
+      8'h50: aligned_error = (keep[43:0] != 44'hfffffffffff) ? 8'd2 : 8'd0;
       default: aligned_error = 8'd1;
     endcase
     if (!last) begin
@@ -135,22 +141,29 @@ module itch_canonicalizer (
     end
   endfunction
 
+  function automatic logic extra_keep(input logic [7:0] msg_type, input logic [23:0] high_keep);
+    unique case (msg_type)
+      8'h50: extra_keep = |high_keep[23:4];
+      default: extra_keep = |high_keep;
+    endcase
+  endfunction
+
   always_comb begin
     unique case (s_payload_tdata[511 -: 8])
       8'h41, 8'h46: decoded_type = AEGIS_EVT_ADD;
-      8'h45: decoded_type = AEGIS_EVT_EXEC;
+      8'h45, 8'h43: decoded_type = AEGIS_EVT_EXEC;
       8'h58: decoded_type = AEGIS_EVT_CANCEL;
       8'h44: decoded_type = AEGIS_EVT_DELETE;
       8'h55: decoded_type = AEGIS_EVT_REPLACE;
       8'h50: decoded_type = AEGIS_EVT_TRADE;
       default: decoded_type = AEGIS_EVT_NONE;
     endcase
-    next_error = aligned_error(s_payload_tdata[511 -: 8], s_payload_tkeep[39:0], s_payload_tlast);
+    next_error = aligned_error(s_payload_tdata[511 -: 8], s_payload_tkeep[43:0], s_payload_tlast);
     if (!s_payload_tvalid) begin
       next_error = 8'd0;
     end else if (decoded_type == AEGIS_EVT_NONE) begin
       next_error = 8'd1;
-    end else if (|s_payload_tkeep[63:40]) begin
+    end else if (extra_keep(s_payload_tdata[511 -: 8], s_payload_tkeep[63:40])) begin
       next_error = 8'd4;
     end
   end
@@ -167,9 +180,11 @@ module itch_canonicalizer (
     end
   end
 
+`ifndef AEGIS_DISABLE_SVA
   property p_hold_when_backpressured;
     @(posedge clk) disable iff (!rst_n)
       valid_q && !m_event_tready |=> valid_q && $stable(event_q);
   endproperty
   assert property (p_hold_when_backpressured);
+`endif
 endmodule

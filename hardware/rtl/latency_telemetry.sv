@@ -49,9 +49,11 @@ module latency_telemetry (
     end
   end
 
+`ifndef AEGIS_DISABLE_SVA
   property p_valid_holds_until_ready;
     @(posedge clk) disable iff (!rst_n)
       telemetry_valid && !telemetry_ready |=> telemetry_valid && $stable(record_q);
   endproperty
   assert property (p_valid_holds_until_ready);
+`endif
 endmodule

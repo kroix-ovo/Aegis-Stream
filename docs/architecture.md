@@ -54,15 +54,21 @@ The Python implementation is the reference model used to validate future RTL:
    fixed-point model references.
 6. `TelemetryRecorder` reports stage-wise replay latency summaries.
 
-## Hardware Growth Path
+## RTL Simulation Path
 
-The starter RTL is intentionally limited to aligned messages. The next hardware
-steps are:
+The RTL path is simulation-grade and intentionally board-agnostic. It now
+contains:
 
-1. Add packet buffering and byte-lane alignment for variable-length ITCH records.
-2. Port transport sequence validation and loss/gap telemetry into RTL.
-3. Grow the current small `order_ref_store` into a banked order-reference store
-   with BRAM/URAM hot cache and HBM model.
-4. Add book-state, feature-window, and sequence-core modules behind the same
-   ready/valid contracts.
-5. Use cocotb to compare every RTL stage against the Python package.
+1. `itch_packet_buffer` for cross-beat ITCH message realignment.
+2. `itch_canonicalizer` for aligned A/F/E/C/X/D/U/P canonical event packing.
+3. `transport_seq_checker` for sequence, gap, duplicate, malformed, and packet
+   counters.
+4. `order_ref_store` for order lifecycle mutation checks.
+5. `price_level_topk` for single-shard aggregate top-K price levels.
+6. `feature_window_buffer` for 64-int8 feature-vector ring buffering.
+7. `temporal_mixer_int8` for a fixed-point int8 mixer datapath MVP.
+
+The remaining hardware steps are board or production-RTL work: compose these
+modules into a deeper parser/book pipeline, replace small searchable structures
+with banked BRAM/URAM/HBM designs, implement the full temporal lookback core,
+and integrate vendor shell, DMA, timing, and telemetry paths.

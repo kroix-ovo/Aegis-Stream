@@ -19,4 +19,18 @@ jobs:
       - name: Run tests
         run: make validate PYTHON=python
       - name: Compile sources
-        run: python -m compileall src tests tools
+        run: python -m compileall src tests tools hardware/cocotb
+
+  cocotb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Install cocotb dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Run cocotb RTL scoreboards
+        run: make test-rtl-cocotb PYTHON=python SIM=icarus

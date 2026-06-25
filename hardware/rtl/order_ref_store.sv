@@ -168,9 +168,11 @@ module order_ref_store #(
     end
   end
 
+`ifndef AEGIS_DISABLE_SVA
   property p_response_holds_under_backpressure;
     @(posedge clk) disable iff (!rst_n)
       rsp_valid && !rsp_ready |=> rsp_valid && $stable({rsp_hit, rsp_symbol, rsp_side, rsp_price, rsp_qty, rsp_err});
   endproperty
   assert property (p_response_holds_under_backpressure);
+`endif
 endmodule

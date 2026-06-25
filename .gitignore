@@ -6,11 +6,15 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+cocotb-env/
 build/
 dist/
 tmp/
+sim_build/
+results.xml
 *.vcd
 *.fst
+*.vvp
 *.jou
 *.log
 *.str

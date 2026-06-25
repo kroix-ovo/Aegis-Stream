@@ -13,8 +13,9 @@ seed implementation:
 - Float and fixed-point int8 temporal-mixer reference models for
   hardware/software co-design.
 - Stage-wise telemetry, replay, benchmark, and report tooling.
-- SystemVerilog interface contracts and starter RTL for the canonical event
-  path.
+- SystemVerilog interface contracts, starter RTL, simulation-stage parser,
+  transport, book, feature-window, and int8 mixer modules with cocotb
+  scoreboards.
 
 ## Quick Start
 
@@ -32,30 +33,33 @@ src/aegis_stream/      Python golden models and replay pipeline
 tests/                 Unit tests for parser, book, feature, model, and replay
 tools/                 Developer-facing replay helpers
 hardware/rtl/          SystemVerilog package and starter modules
+hardware/cocotb/       Icarus/cocotb scoreboards against Python references
 docs/                  Architecture, interfaces, benchmarking, and roadmap
 docs/source/           Original supplied research report and PDF
-.github/workflows/    CI configuration for the Python regression suite
+.github/workflows/    CI configuration for Python, Verilator, and cocotb gates
 ```
 
 ## Current Status
 
-This is a software-complete golden-model and starter-RTL repo, not a completed
-FPGA implementation. The software path is executable and tested across parser,
-transport replay, multi-symbol book state, feature generation, fixed-point model
-inference, benchmark, and reporting flows. The RTL path defines stable data
-contracts and starter modules that can be expanded into the full U55C/Agilex
-board build described in the research brief.
+This is a software-complete golden-model and simulation-grade RTL repo, not a
+completed FPGA implementation. The software path is executable and tested across
+parser, transport replay, multi-symbol book state, feature generation,
+fixed-point model inference, benchmark, and reporting flows. The RTL path now
+has Verilator lint/smoke coverage plus Icarus/cocotb scoreboards for aligned
+canonicalization, cross-beat packet buffering, order-reference lifecycle,
+transport sequence counters, telemetry packing, single-shard top-K price
+levels, feature-window buffering, and a fixed-point int8 mixer MVP.
 
 The main next engineering milestones are:
 
-1. Replace the aligned-message starter RTL canonicalizer with a packet-buffered
-   variable-length ITCH parser.
-2. Add cocotb scoreboards against `aegis_stream.itch`,
-   `aegis_stream.transport`, and `aegis_stream.book`.
+1. Compose the packet buffer and canonicalizer into a deeper streaming parser
+   pipeline with randomized multi-message backpressure.
+2. Expand the top-K price-level MVP into a canonical-event-driven book pipeline
+   fed by the order-reference store.
 3. Introduce HBM-bank simulation and then vendor HBM integration for the
    order-reference store.
-4. Port the feature engine and temporal mixer into Chisel or hand-written
-   pipelined SystemVerilog.
+4. Replace the int8 mixer MVP with the full exported temporal-mixer lookback
+   datapath or Chisel-generated RTL.
 5. Add XRT/QDMA replay and hardware telemetry extraction for board bring-up.
 
 ## Validation
@@ -78,6 +82,7 @@ Run:
 make test
 make lint-rtl
 make sim-rtl
+make test-rtl-cocotb PYTHON=cocotb-env/bin/python SIM=icarus
 make validate
 make demo
 ```
@@ -86,6 +91,11 @@ make demo
 panic in shells configured for `C.UTF-8`. `make sim-rtl` compiles and runs the
 current Verilator smoke tests for the aligned ITCH canonicalizer and the
 order-reference store.
+
+`make test-rtl-cocotb` uses Icarus Verilog by default and runs cocotb
+scoreboards. The local virtualenv `cocotb-env/` is intentionally ignored; install
+the optional dependencies with `python -m pip install -e ".[dev]"` or point
+`PYTHON` at any environment that has cocotb installed.
 
 ## Source Brief
 
