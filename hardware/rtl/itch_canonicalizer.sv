@@ -88,7 +88,7 @@ module itch_canonicalizer (
         decoded.event_type = AEGIS_EVT_EXEC;
         decoded.order_ref = be64(data, 11);
         decoded.shares = be32(data, 19);
-        decoded.misc[15:0] = be64(data, 23)[15:0];
+        decoded.misc[15:0] = be16(data, 29);
       end
       8'h58: begin
         decoded.event_type = AEGIS_EVT_CANCEL;
@@ -136,7 +136,15 @@ module itch_canonicalizer (
   endfunction
 
   always_comb begin
-    decoded_type = decode_aligned(s_payload_tdata, s_payload_timestamp_ns).event_type;
+    unique case (s_payload_tdata[511 -: 8])
+      8'h41, 8'h46: decoded_type = AEGIS_EVT_ADD;
+      8'h45: decoded_type = AEGIS_EVT_EXEC;
+      8'h58: decoded_type = AEGIS_EVT_CANCEL;
+      8'h44: decoded_type = AEGIS_EVT_DELETE;
+      8'h55: decoded_type = AEGIS_EVT_REPLACE;
+      8'h50: decoded_type = AEGIS_EVT_TRADE;
+      default: decoded_type = AEGIS_EVT_NONE;
+    endcase
     next_error = aligned_error(s_payload_tdata[511 -: 8], s_payload_tkeep[39:0], s_payload_tlast);
     if (!s_payload_tvalid) begin
       next_error = 8'd0;
