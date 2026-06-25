@@ -17,6 +17,33 @@ from typing import Iterable, Iterator
 class ItchParseError(ValueError):
     """Raised when an ITCH payload cannot be decoded deterministically."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        offset: int | None = None,
+        message_type: str | None = None,
+        expected_length: int | None = None,
+        available: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.offset = offset
+        self.message_type = message_type
+        self.expected_length = expected_length
+        self.available = available
+
+
+class ItchUnsupportedMessageError(ItchParseError):
+    """Raised when a payload contains an unsupported ITCH message type."""
+
+
+class ItchTruncatedMessageError(ItchParseError):
+    """Raised when a payload ends before a complete ITCH message is available."""
+
+
+class ItchValidationError(ItchParseError):
+    """Raised when a syntactically complete ITCH message has invalid fields."""
+
 
 class EventType(str, Enum):
     ADD = "A"
@@ -102,7 +129,7 @@ class CanonicalEvent:
 
 def _timestamp_from_6(raw: bytes) -> int:
     if len(raw) != 6:
-        raise ItchParseError("ITCH timestamps are 6 bytes")
+        raise ItchTruncatedMessageError("ITCH timestamps are 6 bytes", expected_length=6, available=len(raw))
     return int.from_bytes(raw, "big")
 
 
@@ -112,8 +139,11 @@ def _timestamp_to_6(timestamp_ns: int) -> bytes:
     return timestamp_ns.to_bytes(6, "big")
 
 
-def _stock(raw: bytes) -> str:
-    return raw.decode("ascii").strip()
+def _stock(raw: bytes, *, offset: int = 0) -> str:
+    try:
+        return raw.decode("ascii").strip()
+    except UnicodeDecodeError as exc:
+        raise ItchValidationError("stock field is not ASCII", offset=offset) from exc
 
 
 def _stock_bytes(stock: str) -> bytes:
@@ -123,27 +153,94 @@ def _stock_bytes(stock: str) -> bytes:
     return encoded.ljust(8, b" ")
 
 
-def parse_messages(payload: bytes) -> list[CanonicalEvent]:
+def parse_messages(payload: bytes, *, validate: bool = True) -> list[CanonicalEvent]:
     """Parse a payload containing one or more concatenated ITCH messages."""
 
-    return list(iter_messages(payload))
+    return list(iter_messages(payload, validate=validate))
 
 
-def iter_messages(payload: bytes) -> Iterator[CanonicalEvent]:
+def iter_messages(payload: bytes, *, validate: bool = True, start_offset: int = 0) -> Iterator[CanonicalEvent]:
     offset = 0
     while offset < len(payload):
-        raw_type = chr(payload[offset])
+        raw_type = _message_type(payload[offset])
         length = MESSAGE_LENGTHS.get(raw_type)
         if length is None:
-            raise ItchParseError(f"unsupported ITCH message type {raw_type!r} at byte {offset}")
+            raise ItchUnsupportedMessageError(
+                f"unsupported ITCH message type {raw_type!r} at byte {start_offset + offset}",
+                offset=start_offset + offset,
+                message_type=raw_type,
+            )
         end = offset + length
         if end > len(payload):
-            raise ItchParseError(
+            raise ItchTruncatedMessageError(
                 f"truncated ITCH {raw_type} message at byte {offset}: "
-                f"need {length}, have {len(payload) - offset}"
+                f"need {length}, have {len(payload) - offset}",
+                offset=start_offset + offset,
+                message_type=raw_type,
+                expected_length=length,
+                available=len(payload) - offset,
             )
-        yield _parse_one(payload[offset:end])
+        yield _parse_one(payload[offset:end], offset=start_offset + offset, validate=validate)
         offset = end
+
+
+class ItchStreamDecoder:
+    """Incremental parser for ITCH messages split across replay chunks."""
+
+    def __init__(self, *, validate: bool = True) -> None:
+        self.validate = validate
+        self._buffer = bytearray()
+        self._base_offset = 0
+
+    @property
+    def buffered_bytes(self) -> int:
+        return len(self._buffer)
+
+    def feed(self, chunk: bytes) -> list[CanonicalEvent]:
+        self._buffer.extend(chunk)
+        events: list[CanonicalEvent] = []
+        offset = 0
+        while offset < len(self._buffer):
+            raw_type = _message_type(self._buffer[offset])
+            length = MESSAGE_LENGTHS.get(raw_type)
+            absolute_offset = self._base_offset + offset
+            if length is None:
+                raise ItchUnsupportedMessageError(
+                    f"unsupported ITCH message type {raw_type!r} at byte {absolute_offset}",
+                    offset=absolute_offset,
+                    message_type=raw_type,
+                )
+            if offset + length > len(self._buffer):
+                break
+            message = bytes(self._buffer[offset : offset + length])
+            events.append(_parse_one(message, offset=absolute_offset, validate=self.validate))
+            offset += length
+
+        if offset:
+            del self._buffer[:offset]
+            self._base_offset += offset
+        return events
+
+    def flush(self) -> list[CanonicalEvent]:
+        events = self.feed(b"")
+        if self._buffer:
+            raw_type = _message_type(self._buffer[0])
+            length = MESSAGE_LENGTHS.get(raw_type, 0)
+            raise ItchTruncatedMessageError(
+                f"truncated ITCH {raw_type} message at byte {self._base_offset}: "
+                f"need {length}, have {len(self._buffer)}",
+                offset=self._base_offset,
+                message_type=raw_type,
+                expected_length=length,
+                available=len(self._buffer),
+            )
+        return events
+
+
+def _message_type(raw: int) -> str:
+    if 32 <= raw <= 126:
+        return chr(raw)
+    return f"0x{raw:02x}"
 
 
 def _parse_header(message: bytes) -> tuple[int, int, int]:
@@ -152,7 +249,7 @@ def _parse_header(message: bytes) -> tuple[int, int, int]:
     return stock_locate, tracking_number, timestamp_ns
 
 
-def _parse_one(message: bytes) -> CanonicalEvent:
+def _parse_one(message: bytes, *, offset: int = 0, validate: bool = True) -> CanonicalEvent:
     raw_type = chr(message[0])
     stock_locate, tracking_number, timestamp_ns = _parse_header(message)
 
@@ -160,9 +257,13 @@ def _parse_one(message: bytes) -> CanonicalEvent:
         order_ref = struct.unpack_from("!Q", message, 11)[0]
         side = chr(message[19])
         shares = struct.unpack_from("!I", message, 20)[0]
-        stock = _stock(message[24:32])
+        stock = _stock(message[24:32], offset=offset + 24)
         price = struct.unpack_from("!I", message, 32)[0]
-        attribution = _stock(message[36:40]) if raw_type == "F" else ""
+        attribution = _stock(message[36:40], offset=offset + 36) if raw_type == "F" else ""
+        if validate:
+            _validate_side(side, offset=offset + 19)
+            _validate_positive("shares", shares, offset=offset + 20)
+            _validate_positive("price", price, offset=offset + 32)
         return CanonicalEvent(
             EventType(raw_type),
             stock_locate,
@@ -185,6 +286,11 @@ def _parse_one(message: bytes) -> CanonicalEvent:
         if raw_type == "C":
             printable = chr(message[31])
             price = struct.unpack_from("!I", message, 32)[0]
+            if validate:
+                _validate_printable(printable, offset=offset + 31)
+                _validate_positive("price", price, offset=offset + 32)
+        if validate:
+            _validate_positive("shares", shares, offset=offset + 19)
         return CanonicalEvent(
             EventType(raw_type),
             stock_locate,
@@ -200,6 +306,8 @@ def _parse_one(message: bytes) -> CanonicalEvent:
     if raw_type == "X":
         order_ref = struct.unpack_from("!Q", message, 11)[0]
         shares = struct.unpack_from("!I", message, 19)[0]
+        if validate:
+            _validate_positive("shares", shares, offset=offset + 19)
         return CanonicalEvent(
             EventType.CANCEL,
             stock_locate,
@@ -224,6 +332,11 @@ def _parse_one(message: bytes) -> CanonicalEvent:
         new_order_ref = struct.unpack_from("!Q", message, 19)[0]
         shares = struct.unpack_from("!I", message, 27)[0]
         price = struct.unpack_from("!I", message, 31)[0]
+        if validate:
+            if old_order_ref == new_order_ref:
+                raise ItchValidationError("replace old and new order references match", offset=offset + 11)
+            _validate_positive("shares", shares, offset=offset + 27)
+            _validate_positive("price", price, offset=offset + 31)
         return CanonicalEvent(
             EventType.REPLACE,
             stock_locate,
@@ -239,9 +352,13 @@ def _parse_one(message: bytes) -> CanonicalEvent:
         order_ref = struct.unpack_from("!Q", message, 11)[0]
         side = chr(message[19])
         shares = struct.unpack_from("!I", message, 20)[0]
-        stock = _stock(message[24:32])
+        stock = _stock(message[24:32], offset=offset + 24)
         price = struct.unpack_from("!I", message, 32)[0]
         match_number = struct.unpack_from("!Q", message, 36)[0]
+        if validate:
+            _validate_side(side, offset=offset + 19)
+            _validate_positive("shares", shares, offset=offset + 20)
+            _validate_positive("price", price, offset=offset + 32)
         return CanonicalEvent(
             EventType.TRADE,
             stock_locate,
@@ -255,7 +372,22 @@ def _parse_one(message: bytes) -> CanonicalEvent:
             match_number=match_number,
         )
 
-    raise ItchParseError(f"unsupported ITCH message type {raw_type!r}")
+    raise ItchUnsupportedMessageError(f"unsupported ITCH message type {raw_type!r}", offset=offset, message_type=raw_type)
+
+
+def _validate_side(side: str, *, offset: int) -> None:
+    if side not in {"B", "S"}:
+        raise ItchValidationError(f"invalid order side {side!r}", offset=offset)
+
+
+def _validate_printable(printable: str, *, offset: int) -> None:
+    if printable not in {"Y", "N"}:
+        raise ItchValidationError(f"invalid printable flag {printable!r}", offset=offset)
+
+
+def _validate_positive(field: str, value: int, *, offset: int) -> None:
+    if value <= 0:
+        raise ItchValidationError(f"{field} must be positive", offset=offset)
 
 
 def encode_add(

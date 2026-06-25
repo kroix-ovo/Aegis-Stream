@@ -41,12 +41,18 @@ lockstep for this format.
 
 The Python implementation is the reference model used to validate future RTL:
 
-1. `itch.parse_messages` decodes concatenated ITCH messages.
-2. `OrderBookShard.apply_event` mutates exact order-reference and level state.
-3. `FeatureWindowEngine.update` emits a 64-feature int8 vector and rolling
+1. `transport.decode_transport` decodes raw, MoldUDP64, SoupBinTCP-style, and
+   classic PCAP replay inputs while tracking sequence gaps and malformed
+   capture counters.
+2. `itch.parse_messages` and `ItchStreamDecoder` decode complete or
+   cross-chunk ITCH messages into the canonical event contract.
+3. `MultiSymbolOrderBook.apply_event` mutates exact order-reference and level
+   state across sharded symbols.
+4. `FeatureWindowEngine.update` emits a 64-feature int8 vector and rolling
    window.
-4. `QuantizedTemporalMixer.predict` returns a deterministic score and action.
-5. `TelemetryRecorder` reports stage-wise replay latency summaries.
+5. `FloatTemporalMixer` and `FixedPointTemporalMixer` provide float and bit-true
+   fixed-point model references.
+6. `TelemetryRecorder` reports stage-wise replay latency summaries.
 
 ## Hardware Growth Path
 
@@ -54,7 +60,7 @@ The starter RTL is intentionally limited to aligned messages. The next hardware
 steps are:
 
 1. Add packet buffering and byte-lane alignment for variable-length ITCH records.
-2. Add transport sequence validation and loss/gap telemetry.
+2. Port transport sequence validation and loss/gap telemetry into RTL.
 3. Grow the current small `order_ref_store` into a banked order-reference store
    with BRAM/URAM hot cache and HBM model.
 4. Add book-state, feature-window, and sequence-core modules behind the same

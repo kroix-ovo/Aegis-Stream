@@ -5,12 +5,14 @@ market-data ingest, limit-order-book analytics, and low-batch quantized sequence
 inference. The repository turns the supplied architecture brief into a runnable
 seed implementation:
 
-- A bit-true Python golden path for Nasdaq TotalView-ITCH style event parsing.
-- Stateful order-reference and top-of-book reconstruction.
+- MoldUDP64, SoupBinTCP-style, raw payload, generated stress, and classic PCAP
+  replay inputs for captured market-data payloads.
+- A hardened Python golden path for Nasdaq TotalView-ITCH style event parsing.
+- Stateful multi-symbol order-reference and top-of-book reconstruction.
 - Streaming microstructure feature-window generation.
-- A deterministic int8 temporal-mixer inference stub for hardware/software
-  co-design.
-- Stage-wise telemetry and replay tooling.
+- Float and fixed-point int8 temporal-mixer reference models for
+  hardware/software co-design.
+- Stage-wise telemetry, replay, benchmark, and report tooling.
 - SystemVerilog interface contracts and starter RTL for the canonical event
   path.
 
@@ -19,6 +21,8 @@ seed implementation:
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
 PYTHONPATH=src python3 -m aegis_stream.pipeline --demo --json
+PYTHONPATH=src python3 -m aegis_stream.pipeline --stress 1024 --csv
+PYTHONPATH=src python3 -m aegis_stream.benchmark --stress 1024 --json
 ```
 
 ## Repository Layout
@@ -35,28 +39,38 @@ docs/source/           Original supplied research report and PDF
 
 ## Current Status
 
-This is a comprehensive seed repo, not a completed FPGA implementation. The
-software path is executable and tested. The RTL path defines stable data
+This is a software-complete golden-model and starter-RTL repo, not a completed
+FPGA implementation. The software path is executable and tested across parser,
+transport replay, multi-symbol book state, feature generation, fixed-point model
+inference, benchmark, and reporting flows. The RTL path defines stable data
 contracts and starter modules that can be expanded into the full U55C/Agilex
 board build described in the research brief.
 
 The main next engineering milestones are:
 
-1. Replace the aligned-message starter canonicalizer with a packet-buffered
+1. Replace the aligned-message starter RTL canonicalizer with a packet-buffered
    variable-length ITCH parser.
-2. Add cocotb scoreboards against `aegis_stream.itch` and `aegis_stream.book`.
-3. Introduce HBM-bank simulation for the order-reference store.
-4. Port the temporal mixer into Chisel or hand-written pipelined SystemVerilog.
-5. Add XRT/QDMA replay and telemetry extraction for board bring-up.
+2. Add cocotb scoreboards against `aegis_stream.itch`,
+   `aegis_stream.transport`, and `aegis_stream.book`.
+3. Introduce HBM-bank simulation and then vendor HBM integration for the
+   order-reference store.
+4. Port the feature engine and temporal mixer into Chisel or hand-written
+   pipelined SystemVerilog.
+5. Add XRT/QDMA replay and hardware telemetry extraction for board bring-up.
 
 ## Validation
 
 The Python regression suite covers:
 
 - ITCH message decoding and canonical 256-bit packing.
-- Add, execute, cancel, delete, replace, and trade book-state behavior.
-- Feature-window generation and deterministic model scoring.
-- End-to-end replay output and telemetry summaries.
+- Transport capture decoding, malformed capture accounting, and sequence-gap
+  detection.
+- Add, execute, cancel, delete, replace, and trade book-state behavior across
+  strict/non-strict and multi-symbol paths.
+- Feature-window generation, float/fixed model scoring, and fixed-point
+  determinism checks.
+- End-to-end replay output, benchmark summaries, and telemetry percentile
+  schemas.
 
 Run:
 

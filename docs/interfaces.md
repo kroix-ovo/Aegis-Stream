@@ -22,18 +22,45 @@ Supported messages:
 - `U`: Replace
 - `P`: Non-cross trade
 
+### Transport Replay
+
+```python
+from aegis_stream.transport import decode_transport
+
+replay = decode_transport(capture_bytes, protocol="moldudp64")
+payload = replay.payload
+print(replay.counters.gaps, replay.counters.malformed_packets)
+```
+
+Supported software replay inputs:
+
+- `raw`: concatenated ITCH messages.
+- `moldudp64`: MoldUDP64 datagrams, optionally length-prefixed with u16/u32
+  packet lengths for file captures.
+- `soupbintcp`: two-byte length-prefixed SoupBinTCP-style stream frames where
+  sequenced data frames carry ITCH payload bytes.
+- `pcap`: classic PCAP Ethernet/IPv4/UDP payload extraction with `raw` or
+  `moldudp64` UDP payloads.
+
 ### Book State
 
 ```python
-from aegis_stream.book import OrderBookShard
+from aegis_stream.book import MultiSymbolOrderBook, OrderBookShard
 
 book = OrderBookShard(symbol="AEGIS", top_k=32)
 snapshot = book.apply_event(events[0])
+
+multi = MultiSymbolOrderBook(top_k=32, strict=True)
+snapshot = multi.apply_event(events[0])
 ```
 
 Strict mode rejects duplicate live order references, missing deletes, and
 over-cancels. That is deliberate: silent correction would hide the same class of
 state corruption that the hardware must never allow.
+
+Non-strict mode records `BookIssue` entries instead of raising immediately,
+which is useful for replay reports over imperfect captures. Snapshot comparison
+helpers emit `ReplayMismatch` records for top-K depth mismatches.
 
 ### End-to-End Replay
 
@@ -44,6 +71,32 @@ from aegis_stream.pipeline import run_replay
 result = run_replay(demo_payload(), window=128, feature_count=64)
 print(result.to_jsonable())
 ```
+
+CLI examples:
+
+```bash
+PYTHONPATH=src python3 -m aegis_stream.pipeline --demo --json
+PYTHONPATH=src python3 -m aegis_stream.pipeline --stress 1024 --csv
+PYTHONPATH=src python3 -m aegis_stream.pipeline --input capture.bin --format soupbintcp --non-strict --json
+PYTHONPATH=src python3 -m aegis_stream.benchmark --stress 4096 --iterations 3 --json
+```
+
+### Model Reference
+
+```python
+from aegis_stream.model import FixedPointTemporalMixer, FloatTemporalMixer
+
+float_model = FloatTemporalMixer()
+fixed_model = FixedPointTemporalMixer()
+float_result = float_model.predict(feature_window)
+fixed_result = fixed_model.predict(feature_window)
+```
+
+The default fixed-point weights are loaded from the deterministic exported
+fixture under `src/aegis_stream/data/`. The fallback float baseline trainer uses
+only the Python standard library so public validation does not require PyTorch;
+richer PyTorch training can consume the same exported feature matrices when
+PyTorch is installed.
 
 ## RTL Interfaces
 

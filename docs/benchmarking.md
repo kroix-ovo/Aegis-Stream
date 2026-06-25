@@ -41,6 +41,26 @@ For each run, report:
 - Drops, gaps, malformed-packet count, and backpressure events.
 - Device resource utilization and timing summary when hardware is available.
 
+## Software Tools
+
+The current repository includes dependency-light software benchmark and replay
+tools. These timings validate schemas and catch regressions; they are not FPGA
+latency proxies.
+
+```bash
+PYTHONPATH=src python3 -m aegis_stream.pipeline --demo --json
+PYTHONPATH=src python3 -m aegis_stream.pipeline --stress 10000 --csv
+PYTHONPATH=src python3 -m aegis_stream.pipeline --input capture.bin --format moldudp64 --json
+PYTHONPATH=src python3 -m aegis_stream.pipeline --input capture.pcap --format pcap --pcap-inner moldudp64 --json
+PYTHONPATH=src python3 -m aegis_stream.benchmark --stress 10000 --iterations 3 --json
+```
+
+`aegis_stream.benchmark` reports parser throughput, book issue and mismatch
+counts, feature-generation latency percentiles, model-inference latency
+percentiles, and the end-to-end replay summary. `tools/generate_report.py`
+renders `docs/software_verification_report.md` from a deterministic stress
+trace for local snapshots.
+
 ## Baselines
 
 Recommended comparison classes:

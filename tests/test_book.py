@@ -1,6 +1,6 @@
 import unittest
 
-from aegis_stream.book import BookError, OrderBookShard
+from aegis_stream.book import BookError, MultiSymbolOrderBook, OrderBookShard, compare_snapshot_depth
 from aegis_stream.itch import (
     encode_add,
     encode_cancel,
@@ -53,6 +53,42 @@ class BookTests(unittest.TestCase):
         book.apply_event(events[0])
         with self.assertRaises(BookError):
             book.apply_event(events[1])
+
+    def test_non_strict_mode_records_issue(self) -> None:
+        book = OrderBookShard(strict=False)
+        event = parse_messages(encode_cancel(order_ref=404, shares=1, timestamp_ns=1))[0]
+        snapshot = book.apply_event(event)
+        self.assertEqual(snapshot.event_count, 1)
+        self.assertEqual(len(book.issues), 1)
+        self.assertIn("missing order", book.issues[0].message)
+
+    def test_multi_symbol_order_index_routes_updates(self) -> None:
+        book = MultiSymbolOrderBook(top_k=2)
+        events = parse_messages(
+            encode_add(order_ref=1, side="B", shares=100, stock="AAA", price=100, timestamp_ns=1)
+            + encode_add(order_ref=2, side="S", shares=50, stock="BBB", price=200, timestamp_ns=2)
+            + encode_cancel(order_ref=1, shares=25, timestamp_ns=3)
+            + encode_delete(order_ref=2, timestamp_ns=4)
+        )
+        for event in events:
+            book.apply_event(event)
+
+        aaa = book.snapshot("AAA")
+        bbb = book.snapshot("BBB")
+        self.assertEqual(aaa.best_bid.shares, 75)
+        self.assertIsNone(bbb.best_ask)
+        self.assertIn(1, book.order_to_symbol)
+        self.assertNotIn(2, book.order_to_symbol)
+
+    def test_top_k_mismatch_reporting(self) -> None:
+        expected = OrderBookShard(symbol="AEGIS", top_k=2)
+        actual = OrderBookShard(symbol="AEGIS", top_k=2)
+        event = parse_messages(encode_add(order_ref=1, side="B", shares=100, stock="AEGIS", price=100, timestamp_ns=1))[0]
+        expected_snapshot = expected.apply_event(event)
+        actual_snapshot = actual.snapshot()
+        mismatches = compare_snapshot_depth(expected_snapshot, actual_snapshot, event_index=7)
+        self.assertEqual(len(mismatches), 1)
+        self.assertEqual(mismatches[0].event_index, 7)
 
 
 if __name__ == "__main__":

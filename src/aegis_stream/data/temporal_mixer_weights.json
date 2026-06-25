@@ -1,0 +1,7 @@
+{
+  "feature_count": 64,
+  "generator": "deterministic-int8-v1",
+  "hidden": 16,
+  "lookback": 32,
+  "name": "deterministic-int8-v1"
+}

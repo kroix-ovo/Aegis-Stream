@@ -3,6 +3,10 @@ import unittest
 from aegis_stream.itch import (
     EventType,
     ItchParseError,
+    ItchStreamDecoder,
+    ItchTruncatedMessageError,
+    ItchUnsupportedMessageError,
+    ItchValidationError,
     encode_add,
     encode_cancel,
     encode_delete,
@@ -62,9 +66,38 @@ class ItchParserTests(unittest.TestCase):
         self.assertEqual((word >> 32) & 0xFFFFFFFFFFFFFFFF, 300)
 
     def test_rejects_truncated_payload(self) -> None:
-        with self.assertRaises(ItchParseError):
+        with self.assertRaises(ItchTruncatedMessageError) as ctx:
             parse_messages(b"A\x00")
+        self.assertEqual(ctx.exception.offset, 0)
+        self.assertEqual(ctx.exception.message_type, "A")
 
+    def test_rejects_unsupported_message_with_offset(self) -> None:
+        payload = encode_add(order_ref=1, side="B", shares=100, stock="AEGIS", price=100, timestamp_ns=1) + b"Z"
+        with self.assertRaises(ItchUnsupportedMessageError) as ctx:
+            parse_messages(payload)
+        self.assertEqual(ctx.exception.offset, 36)
+        self.assertEqual(ctx.exception.message_type, "Z")
+
+    def test_rejects_invalid_side(self) -> None:
+        payload = bytearray(encode_add(order_ref=1, side="B", shares=100, stock="AEGIS", price=100, timestamp_ns=1))
+        payload[19] = ord("X")
+        with self.assertRaises(ItchValidationError):
+            parse_messages(bytes(payload))
+
+    def test_stream_decoder_handles_cross_chunk_message(self) -> None:
+        payload = encode_add(order_ref=1, side="B", shares=100, stock="AEGIS", price=100, timestamp_ns=1)
+        decoder = ItchStreamDecoder()
+        self.assertEqual(decoder.feed(payload[:5]), [])
+        events = decoder.feed(payload[5:])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].order_ref, 1)
+        self.assertEqual(decoder.flush(), [])
+
+    def test_stream_decoder_flush_reports_partial_tail(self) -> None:
+        decoder = ItchStreamDecoder()
+        decoder.feed(encode_add(order_ref=1, side="B", shares=100, stock="AEGIS", price=100, timestamp_ns=1)[:12])
+        with self.assertRaises(ItchParseError):
+            decoder.flush()
 
 if __name__ == "__main__":
     unittest.main()
