@@ -14,21 +14,11 @@ seed implementation:
 - SystemVerilog interface contracts and starter RTL for the canonical event
   path.
 
-The local folder is named `Ageis-Stream`, but the project and repository content
-use the intended spelling: `Aegis-Stream`.
-
 ## Quick Start
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
 PYTHONPATH=src python3 -m aegis_stream.pipeline --demo --json
-```
-
-If using the bundled Codex runtime:
-
-```bash
-PYTHONPATH=src /Users/kroixjones/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest discover -s tests
-PYTHONPATH=src /Users/kroixjones/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m aegis_stream.pipeline --demo --json
 ```
 
 ## Repository Layout
@@ -85,7 +75,7 @@ order-reference store.
 
 ## Source Brief
 
-The original research artifacts are preserved under `docs/source/`:
+The architecture reference artifacts are preserved under `docs/source/`:
 
 - `Aegis-Stream.pdf`
 - `deep-research-report.md`
