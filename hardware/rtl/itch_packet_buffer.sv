@@ -74,19 +74,23 @@ module itch_packet_buffer #(
       count_q <= 8'd0;
       end_seen_q <= 1'b0;
       timestamp_q <= 64'd0;
+      /* verilator lint_off BLKSEQ */
       for (int i = 0; i < BUF_BYTES; i++) begin
-        buffer_q[i] <= 8'd0;
+        buffer_q[i] = 8'd0;
       end
+      /* verilator lint_on BLKSEQ */
     end else if (m_payload_tvalid && m_payload_tready) begin
       int drop_count;
       drop_count = complete_msg ? int'(msg_len) : unsupported_msg ? 1 : int'(count_q);
+      /* verilator lint_off BLKSEQ */
       for (int i = 0; i < BUF_BYTES; i++) begin
         if (i + drop_count < BUF_BYTES) begin
-          buffer_q[i] <= buffer_q[i + drop_count];
+          buffer_q[i] = buffer_q[i + drop_count];
         end else begin
-          buffer_q[i] <= 8'd0;
+          buffer_q[i] = 8'd0;
         end
       end
+      /* verilator lint_on BLKSEQ */
       count_q <= count_q - 8'(drop_count);
       if (int'(count_q) == drop_count) begin
         end_seen_q <= 1'b0;
@@ -97,12 +101,14 @@ module itch_packet_buffer #(
       if (count_q == 8'd0) begin
         timestamp_q <= s_payload_timestamp_ns;
       end
+      /* verilator lint_off BLKSEQ */
       for (int i = 0; i < 64; i++) begin
         if (s_payload_tkeep[i] && int'(count_q) + append_count < BUF_BYTES) begin
-          buffer_q[int'(count_q) + append_count] <= s_payload_tdata[511 - i*8 -: 8];
+          buffer_q[int'(count_q) + append_count] = s_payload_tdata[511 - i*8 -: 8];
           append_count = append_count + 1;
         end
       end
+      /* verilator lint_on BLKSEQ */
       count_q <= count_q + 8'(append_count);
       if (s_payload_tlast) begin
         end_seen_q <= 1'b1;
