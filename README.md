@@ -42,15 +42,15 @@ docs/source/           Original supplied research report and PDF
 ## Current Status
 
 This is a software-complete golden-model and simulation-grade RTL repo, not a
-completed FPGA implementation. The software path is executable and tested across
-parser, transport replay, multi-symbol book state, feature generation,
-fixed-point model inference, benchmark, and reporting flows. The RTL path now
-has Verilator lint/smoke coverage plus Icarus/cocotb scoreboards for aligned
+completed FPGA implementation (I do not have money for a research grade FPGA).
+The software path is executable and tested across parser, transport replay, 
+multi-symbol book state, feature generation, fixed-point model inference, benchmark, and reporting flows. 
+The RTL path now has Verilator lint/smoke coverage plus Icarus/cocotb scoreboards for aligned
 canonicalization, cross-beat packet buffering, order-reference lifecycle,
 transport sequence counters, telemetry packing, single-shard top-K price
 levels, feature-window buffering, and a fixed-point int8 mixer MVP.
 
-The main next engineering milestones are:
+The main next big milestones I must complete are:
 
 1. Compose the packet buffer and canonicalizer into a deeper streaming parser
    pipeline with randomized multi-message backpressure.
